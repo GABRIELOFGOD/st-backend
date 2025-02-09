@@ -174,6 +174,7 @@ export const taskParticipate = catchAsync(async (req: Request, res: Response) =>
     if (checkUsername) return res.status(400).json({ status: "failed", message: "Username has already participated in this task" });
   
     const autoTask = await telegram(username);
+    console.log("response from telegram", autoTask);
     if (autoTask.status !== "OK") return res.status(400).json({ status: "failed", message: "User does not exist on Telegram" });
 
     const newParticipant = participantRepository.create({ user, task, username, completed: "completed" });

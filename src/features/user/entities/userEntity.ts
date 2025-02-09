@@ -51,6 +51,9 @@ export class User {
   @Column({ default: "user", type: "enum", enum: ["user", "admin"] })
   role!: string;
 
+  @Column({ type: "timestamp", nullable: true })
+  lastLogin!: Date;
+
   @Column({ default: AccountStatus.ACTIVE, type: "enum", enum: AccountStatus })
   status!: AccountStatus;
 }
