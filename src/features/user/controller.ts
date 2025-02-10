@@ -4,11 +4,13 @@ import { NextFunction, Request, Response } from "express";
 import { User } from "./entities/userEntity";
 import { dataSource } from "../../core/config/datasource";
 import { checkLastLogin } from "../task/services/dailyLogin";
+import { addReferrer } from "./services/referrals";
 
-const userRepository: Repository<User> = dataSource.getRepository(User);
+export const userRepository: Repository<User> = dataSource.getRepository(User);
 
 export const userAuth = catchAsync(async (req: Request, res: Response, next: NextFunction) => {
   const { wallet } = req.body;
+  const { ref } = req.query;
   if (!wallet) {
     return res.status(400).json({
       status: "failed",
@@ -17,7 +19,8 @@ export const userAuth = catchAsync(async (req: Request, res: Response, next: Nex
   }
 
   const user = await userRepository.findOne({ 
-    where: { wallet }
+    where: { wallet },
+    relations: ["referrer", "referrers"]
   });
 
   if (user) return res.status(200).json({
@@ -28,6 +31,16 @@ export const userAuth = catchAsync(async (req: Request, res: Response, next: Nex
 
   const newUser = userRepository.create({ wallet });
   newUser.points = 100;
+  if (ref) {
+    const referrer = await userRepository.findOne({
+      where: { id: Number(ref) }
+    });
+
+    if (referrer) {
+      newUser.referrer = referrer;
+    }
+    await addReferrer(newUser, Number(ref));
+  }
   const savedUser = await userRepository.save(newUser);
   return res.status(200).json({
     status: "success",
@@ -96,25 +109,24 @@ export const checkUserCheckIn = catchAsync(async (req: Request, res: Response) =
 
 
 export const updateLastLogin = catchAsync(async (req: Request, res: Response) => {
-  try {
-    const userId = req.body.userId;
-    const user = await userRepository.findOne(userId);
+  const { userId } = req.body;
+  const user = await userRepository.findOne({
+    where: { id: userId }
+  });
 
-    if (!user) {
-      return res.status(404).json({ status: "error", message: "User not found" });
-    }
-
-    // ================ CHECKING IF USER HAS CHECKED IN TODAY ================ //
-    const hasChecked = await checkLastLogin(user);
-    if (hasChecked) {
-      return res.status(200).json({ status: "success", message: "User has checked in today" });
-    }
-
-    user.lastLogin = new Date();
-    await userRepository.save(user);
-
-    return res.status(200).json({ status: "success", message: "last login updated" });
-  } catch (error: any) {
-    return res.status(500).json({ status: "error", message: "An error occurred", error: error.message });
+  if (!user) {
+    return res.status(404).json({ status: "error", message: "User not found" });
   }
+
+  // ================ CHECKING IF USER HAS CHECKED IN TODAY ================ //
+  const hasChecked = await checkLastLogin(user);
+  if (hasChecked) {
+    return res.status(200).json({ status: "success", message: "User has checked in today" });
+  }
+
+  user.lastLogin = new Date();
+  user.points = Number(user.points) + 100;
+  await userRepository.save(user);
+
+  return res.status(200).json({ status: "success", message: "last login updated" });
 });
